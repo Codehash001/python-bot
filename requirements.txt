@@ -1,0 +1,11 @@
+fastapi==0.68.0
+uvicorn==0.15.0
+jinja2==3.0.1
+pandas==1.3.3
+openpyxl==3.0.9
+pandasai==1.1.0
+openai==0.27.0
+python-multipart==0.0.5
+tenacity==8.0.1
+llama-index==0.6.11
+pydantic==1.8.2

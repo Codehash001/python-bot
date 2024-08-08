@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PandasAI Chatbot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+    <style>
+        @keyframes blink {
+            0% { opacity: .2; }
+            20% { opacity: 1; }
+            100% { opacity: .2; }
+        }
+        .waiting span {
+            animation-name: blink;
+            animation-duration: 1.4s;
+            animation-iteration-count: infinite;
+            animation-fill-mode: both;
+        }
+        .waiting span:nth-child(2) {
+            animation-delay: .2s;
+        }
+        .waiting span:nth-child(3) {
+            animation-delay: .4s;
+        }
+        /* Add styles for markdown content */
+        .markdown-content h1 { font-size: 1.5em; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
+        .markdown-content h2 { font-size: 1.25em; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
+        .markdown-content p { margin-bottom: 0.5em; }
+        .markdown-content ul, .markdown-content ol { margin-left: 1.5em; margin-bottom: 0.5em; }
+        .markdown-content code { background-color: #f0f0f0; padding: 0.2em 0.4em; border-radius: 3px; }
+        .markdown-content pre { background-color: #f0f0f0; padding: 1em; border-radius: 5px; overflow-x: auto; }
+        /* Add styles for table */
+        .markdown-content table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        .markdown-content th, .markdown-content td {
+            border-bottom: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .markdown-content th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-400 to-purple-500">
+    <div class="container mx-auto p-4 bg-white rounded-lg shadow-lg max-w-2xl flex flex-col h-[600px]">
+        <h1 class="text-3xl font-bold mb-4 text-center text-red-600">AI Chatbot</h1>
+        
+        <div class="flex bg-gray-200 p-1 rounded-lg mb-4">
+            <button id="chat-tab" class="flex-1 py-2 px-4 text-center transition-all duration-300 ease-in-out relative text-red-600 bg-white rounded-lg shadow hover:text-red-400">
+                Chat
+            </button>
+            <button id="web-query-tab" class="flex-1 py-2 px-4 text-center transition-all duration-300 ease-in-out relative text-gray-600 hover:text-red-400 rounded-lg">
+                Web Query
+            </button>
+        </div>
+        
+        <div id="chatbox" class="flex-grow shadow rounded-lg p-4 mb-4 overflow-y-auto"></div>
+        <div id="web-query-content" class="flex-grow shadow rounded-lg p-4 mb-4 overflow-y-auto hidden"></div>
+        
+        <div class="flex space-x-3">
+            <input type="text" id="user-input" placeholder="Type your message..." class="flex-grow p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500">
+            <button id="send-btn" class="bg-red-500 text-white px-6 py-2 rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 flex items-center justify-center space-x-2">
+                Send
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const chatbox = document.getElementById('chatbox');
+        const webQueryContent = document.getElementById('web-query-content');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const chatTab = document.getElementById('chat-tab');
+        const webQueryTab = document.getElementById('web-query-tab');
+
+        let currentTab = 'chat';
+
+        sendBtn.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        chatTab.addEventListener('click', () => setActiveTab('chat'));
+        webQueryTab.addEventListener('click', () => setActiveTab('web-query'));
+
+        // Add initial message
+        window.addEventListener('load', () => {
+            appendMessage('Bot', "Hello! Ask me anything about your data or use the Web Query tab for website-related questions.", false);
+        });
+
+        function setActiveTab(tab) {
+            currentTab = tab;
+            if (tab === 'chat') {
+                chatTab.classList.add('bg-white', 'text-red-600', 'shadow');
+                chatTab.classList.remove('text-gray-600');
+                webQueryTab.classList.remove('bg-white', 'text-red-600', 'shadow');
+                webQueryTab.classList.add('text-gray-600');
+                chatbox.classList.remove('hidden');
+                webQueryContent.classList.add('hidden');
+            } else {
+                webQueryTab.classList.add('bg-white', 'text-red-600', 'shadow');
+                webQueryTab.classList.remove('text-gray-600');
+                chatTab.classList.remove('bg-white', 'text-red-600', 'shadow');
+                chatTab.classList.add('text-gray-600');
+                chatbox.classList.add('hidden');
+                webQueryContent.classList.remove('hidden');
+            }
+        }
+
+        function sendMessage() {
+            const message = userInput.value.trim();
+            if (message) {
+                appendMessage('You', message, true);
+                showWaitingDots();
+                const endpoint = currentTab === 'chat' ? '/ask' : '/web_query';
+                fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({question: message}),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    removeWaitingDots();
+                    appendMessage('Bot', data.response, false);
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                    removeWaitingDots();
+                    appendMessage('Bot', 'Sorry, there was an error processing your request.', false);
+                });
+                userInput.value = '';
+            }
+        }
+
+        function appendMessage(sender, message, isUser) {
+            const messageElement = document.createElement('div');
+            messageElement.className = `flex items-start mb-4 ${isUser ? 'justify-end' : 'justify-start'}`;
+            
+            const avatarElement = document.createElement('div');
+            avatarElement.className = `w-8 h-8 rounded-full flex items-center justify-center text-white font-bold ${isUser ? 'bg-gray-400 ml-2' : 'bg-red-500 mr-2'}`;
+            avatarElement.textContent = isUser ? 'U' : 'B';
+
+            const textElement = document.createElement('div');
+            textElement.className = `max-w-xs lg:max-w-md xl:max-w-lg ${isUser ? 'bg-red-500 text-white' : 'bg-gray-200'} rounded-lg p-3`;
+            
+            if (isUser) {
+                textElement.textContent = message;
+            } else {
+                // Parse markdown and sanitize HTML for non-table content
+                const rawHtml = marked.parse(message);
+                const sanitizedHtml = DOMPurify.sanitize(rawHtml);
+                textElement.innerHTML = sanitizedHtml;
+                textElement.classList.add('markdown-content');
+            }
+
+            if (isUser) {
+                messageElement.appendChild(textElement);
+                messageElement.appendChild(avatarElement);
+            } else {
+                messageElement.appendChild(avatarElement);
+                messageElement.appendChild(textElement);
+            }
+
+            const targetElement = currentTab === 'chat' ? chatbox : webQueryContent;
+            targetElement.appendChild(messageElement);
+            targetElement.scrollTop = targetElement.scrollHeight;
+        }
+
+        function showWaitingDots() {
+            const waitingElement = document.createElement('div');
+            waitingElement.className = 'flex items-start mb-4 justify-start waiting';
+            waitingElement.innerHTML = `
+                <div class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold bg-red-500 mr-2">B</div>
+                <div class="bg-gray-200 rounded-lg p-3 space-x-1 flex">
+                    <span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" style="fill: rgba(0, 0, 0, 1);transform: ;msFilter:;"><path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2z"></path></svg>
+                    </span>
+                    <span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" style="fill: rgba(0, 0, 0, 1);transform: ;msFilter:;"><path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2z"></path></svg>
+                    </span>
+                    <span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" style="fill: rgba(0, 0, 0, 1);transform: ;msFilter:;"><path d="M12 2C6.486 2 2 6.486 2 12s4.486 10 10 10 10-4.486 10-10S17.514 2 12 2z"></path></svg>
+                    </span>
+                </div>
+            `;
+            waitingElement.id = 'waiting-dots';
+            const targetElement = currentTab === 'chat' ? chatbox : webQueryContent;
+            targetElement.appendChild(waitingElement);
+            targetElement.scrollTop = targetElement.scrollHeight;
+        }
+
+        function removeWaitingDots() {
+            const waitingElement = document.getElementById('waiting-dots');
+            if (waitingElement) {
+                waitingElement.remove();
+            }
+        }
+    </script>
+</body>
+</html>
