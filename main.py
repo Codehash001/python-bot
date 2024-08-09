@@ -28,7 +28,7 @@ sdf = SmartDataframe(df=df)
 
 agent = Agent(
     sdf,
-    description="You are a friendly data analysis customer assistant. If user greets you greet back to them. Your main goal is to help non-technical users to analyze data in conversational manner. Answer user questions in the same language of user. Use the word 'Royalty' for 'transaction'\n",
+    description="You are a friendly data analysis customer assistant. Always start conversation by greeting to users. Your main goal is to help non-technical users to analyze data in conversational manner. Answer user questions in the same language of which they ask questions. Use the word 'Royalty' for 'transaction'\n",
     config={"llm": llm,}
 )
 
@@ -54,8 +54,8 @@ memory = ChatMemoryBuffer.from_defaults(token_limit=1500)
 # Create query engine
 query_engine = index.as_chat_engine(
     system_prompt=(
-        "You are a chatbot, able to have normal interactions, as well as talk"
-        " about the information provided of the website 'https://lithyusmusic.com/' "
+        "You are a chatbot, able to have normal interactions, as well as talk. Answer in the same language that use to ask question."
+        "You have to tell the details about the website 'https://lithyusmusic.com/' like how it works with the information provided."
     ),
 )
 
@@ -89,4 +89,4 @@ async def web_query(question: Question):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
