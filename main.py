@@ -80,7 +80,7 @@ async def ask(question: Question):
 @app.post("/web_query")
 async def web_query(question: Question):
     try:
-        response = query_engine.chat(question.question , memory)
+        response = query_engine.chat(question.question)
         return {"response": str(response)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
