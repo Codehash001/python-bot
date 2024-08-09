@@ -51,9 +51,11 @@ memory = ChatMemoryBuffer.from_defaults(token_limit=1500)
 
 # Create query engine
 query_engine = index.as_chat_engine(
+    chat_mode="CONDENSE_PLUS_CONTEXT",
     system_prompt=(
         "You are a chatbot, able to have normal interactions, as well as talk. Answer in the same language that use to ask question."
         "You have to tell the details about the website 'https://lithyusmusic.com/' about how it works with the context provided."
+        "Don't talk about terms and condition , always talk about basic usecase of the website that how user need to know about."
     ),
 )
 
