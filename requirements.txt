@@ -8,3 +8,4 @@ python-multipart
 tenacity
 llama-index
 pydantic
+llama-index-readers-pandas-ai
