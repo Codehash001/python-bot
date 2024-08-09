@@ -16,21 +16,19 @@ from llama_index.core import (
     load_index_from_storage,
 )
 from llama_index.core.memory import ChatMemoryBuffer
+from llama_index.readers.pandas_ai import PandasAIReader
 
 app = FastAPI()
 
 # Set up the LLM and DataFrame
 llm = OpenAI(model_name="gpt-4o")
 
+
+loader = PandasAIReader(pandas_llm=llm)
+
 # Read the Excel file
 df = pd.read_excel('data.xlsx')
 sdf = SmartDataframe(df=df)
-
-agent = Agent(
-    sdf,
-    description="You are a friendly data analysis customer assistant. Always start conversation by greeting to users. Your main goal is to help non-technical users to analyze data in conversational manner. Answer user questions in the same language of which they ask questions. Use the word 'Royalty' for 'transaction'\n",
-    config={"llm": llm,}
-)
 
 # Set up Jinja2 templates
 templates = Jinja2Templates(directory="templates")
@@ -55,9 +53,10 @@ memory = ChatMemoryBuffer.from_defaults(token_limit=1500)
 query_engine = index.as_chat_engine(
     system_prompt=(
         "You are a chatbot, able to have normal interactions, as well as talk. Answer in the same language that use to ask question."
-        "You have to tell the details about the website 'https://lithyusmusic.com/' like how it works with the information provided."
+        "You have to tell the details about the website 'https://lithyusmusic.com/' about how it works with the context provided."
     ),
 )
+
 
 class Question(BaseModel):
     question: str
@@ -66,15 +65,13 @@ class Question(BaseModel):
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-def ask_agent(agent, question):
-    response = agent.chat(f"question:{question}")
-    return str(response)
-
 @app.post("/ask")
 async def ask(question: Question):
     try:
-        response = ask_agent(agent, question.question)
+        modified_question = f"{question.question} \n Give the answer in markdown list format. use the same language in the question.\n"
+        response = loader.run_pandas_ai(
+            df, modified_question, is_conversational_answer=True
+        )
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
@@ -82,7 +79,7 @@ async def ask(question: Question):
 @app.post("/web_query")
 async def web_query(question: Question):
     try:
-        response = query_engine.query(question.question)
+        response = query_engine.chat(question.question)
         return {"response": str(response)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
