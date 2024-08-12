@@ -1,89 +1,114 @@
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
-import pandas as pd
-from pandasai import Agent, SmartDataframe
-from pandasai.llm import OpenAI
-import time
-from tenacity import retry, stop_after_attempt, wait_fixed
-import os.path
-from llama_index.core import (
-    VectorStoreIndex,
-    SimpleDirectoryReader,
-    StorageContext,
-    load_index_from_storage,
-)
-from llama_index.core.memory import ChatMemoryBuffer
-from llama_index.readers.pandas_ai import PandasAIReader
+from fastapi import FastAPI, HTTPException
+from typing import List
+from fastapi.middleware.cors import CORSMiddleware
+import re
 
 app = FastAPI()
 
-# Set up the LLM and DataFrame
-llm = OpenAI(model_name="gpt-4o")
-
-
-loader = PandasAIReader(pandas_llm=llm)
-
-# Read the Excel file
-df = pd.read_excel('data.xlsx')
-sdf = SmartDataframe(df=df)
-
-# Set up Jinja2 templates
-templates = Jinja2Templates(directory="templates")
-
-# Set up LlamaIndex
-PERSIST_DIR = "./storage"
-if not os.path.exists(PERSIST_DIR):
-    # load the documents and create the index
-    documents = SimpleDirectoryReader("webdata").load_data()
-    index = VectorStoreIndex.from_documents(documents)
-    # store it for later
-    index.storage_context.persist(persist_dir=PERSIST_DIR)
-else:
-    # load the existing index
-    storage_context = StorageContext.from_defaults(persist_dir=PERSIST_DIR)
-    index = load_index_from_storage(storage_context)
-
-# memory
-memory = ChatMemoryBuffer.from_defaults(token_limit=1500)
-
-# Create query engine
-query_engine = index.as_chat_engine(
-    system_prompt=(
-        "You are a chatbot, able to have normal interactions, as well as talk. Answer in the same language that use to ask question."
-        "You have to tell the details about the website 'https://lithyusmusic.com/' about how it works with the context provided."
-        "Don't talk about terms and condition , always talk about basic usecase of the website that how user need to know about."
-    ),
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
 )
 
+# Data provided in the paste
+data = """Artist   Amount
+0                              AMOXD   0.1354
+1                             Almkit   0.0071
+2                             Bassid   0.0298
+3                          Big Power   1.3226
+4                            Black H   5.5538
+5                 Bricefa La légende   0.1108
+6                         DJÔDJÔRÔBÔ   0.1805
+7                         DNL Kazama   0.1627
+8                            Dembouz   0.1275
+9                  Deuspi the rapper   2.1932
+10                   Dim's crescendo   0.4445
+11             Dixrock, Ashley Power   0.0626
+12                            Djeezy   0.8689
+13                   Djeezy, Toza, N   0.2423
+14                        Djoblack'b   2.3395
+15                  EMSO 225, Wesley   0.2570
+16                            H'Lams   1.0692
+17                               H.A   0.0539
+18                           Halim C   3.4078
+19                   Huguo Boss, DDK   2.3618
+20                             J.C.B   1.3931
+21                         Johnny lp   0.2832
+22                    KSD, FK Leader   0.9853
+23                              Kara   0.1797
+24                          Kaza 225   0.0155
+25                     Le Chouchouté   5.9840
+26                       Lyon Spirit   0.0769
+27                       Léo Lil Boy   0.0408
+28                        MC Bugarri   0.2695
+29                                MS   1.8603
+30                          Max e'sh   0.0111
+31          Memphis Killah, Dam Tito   0.0282
+32                              Mozo   1.2683
+33                      ND2B, SHVDOW   0.1165
+34                              NIVA   0.0534
+35                      Obman BigBoy   0.0715
+36                        Prezy Gvng   0.2522
+37                     Ratio Positif   0.0003
+38                       Regis SOSSA   1.7276
+39              Regis SOSSA, Dembouz  28.6882
+40                          Rh Rahim   0.0426
+41                            Shisco   0.2311
+42                             Smalt   0.0492
+43                          THE LORD  13.7254
+44  THE LORD, Darki, Odia The Meanie   8.1032
+45             THE LORD, Hot Hearted   3.9835
+46                    Thug six16teen   3.9018
+47                           Tshevan   1.6821
+48                           Zabrota   0.0132"""
 
-class Question(BaseModel):
-    question: str
+# Process the data
+lines = data.strip().split('\n')[1:]  # Skip the header
+artist_data = {}
 
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+for line in lines:
+    parts = line.split()
+    amount = float(parts[-1])
+    artist = ' '.join(parts[1:-1])
+    artist_data[artist] = amount
 
-@app.post("/ask")
-async def ask(question: Question):
+def get_recommendations(artist_name: str, n: int = 3) -> List[str]:
+    if artist_name not in artist_data:
+        raise HTTPException(status_code=404, detail="Artist not found")
+    
+    artist_amount = artist_data[artist_name]
+    
+    # Calculate the difference in streaming numbers
+    differences = {}
+    for artist, amount in artist_data.items():
+        if artist != artist_name:
+            diff = abs(amount - artist_amount)
+            # Check if the input artist name is part of this artist name
+            if artist_name in artist:
+                # Remove the input artist name and any leading/trailing commas and spaces
+                remaining = re.sub(f'^{re.escape(artist_name)},?\s*|,?\s*{re.escape(artist_name)}$', '', artist).strip(', ')
+                if remaining:  # Only add if there's something left after removal
+                    differences[remaining] = diff
+            else:
+                differences[artist] = diff
+    
+    # Sort by the smallest difference
+    sorted_artists = sorted(differences, key=differences.get)
+    
+    return sorted_artists[:n]
+
+@app.get("/recommendation/")
+async def recommend(artist_name: str):
     try:
-        modified_question = f"{question.question} \n Give the answer in markdown list format. use the same language in the question.\n"
-        response = loader.run_pandas_ai(
-            df, modified_question, is_conversational_answer=True
-        )
-        return {"response": response}
+        recommendations = get_recommendations(artist_name)
+        return {"artist": artist_name, "recommendations": recommendations}
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
-
-@app.post("/web_query")
-async def web_query(question: Question):
-    try:
-        response = query_engine.chat(question.question)
-        return {"response": str(response)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

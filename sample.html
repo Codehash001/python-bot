@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Artist Recommendation System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            min-height: 90vh;
+            overflow: hidden;
+            position: relative;
+        }
+        #loginForm {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        #loginButton{
+            background-color: black;
+            color: aliceblue;
+            border-radius: 4px;
+        }
+        input, button {
+            padding: 10px;
+            font-size: 16px;
+        }
+        #announcementDiv {
+            background-color: #ff0000;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        #backButton {
+            position: absolute;
+            bottom: 5%;
+            right: 5%;
+            display: none;
+            background-color: black;
+            color: aliceblue;
+            border-radius: 20px;
+            cursor: pointer;
+            padding: 8px 14px ;
+        }
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>Artist Recommendation System</h1>
+    
+    <div id="announcementDiv"></div>
+    
+    <form id="loginForm">
+        <input type="text" id="artistName" placeholder="Enter username" required>
+        <button type="submit" id="loginButton">Login</button>
+    </form>
+
+    <button id="backButton">Back to Login</button>
+
+    <script>
+        const loginForm = document.getElementById('loginForm');
+        const announcementDiv = document.getElementById('announcementDiv');
+        const backButton = document.getElementById('backButton');
+
+        loginForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const artistName = document.getElementById('artistName').value;
+            
+            // Call the backend API
+            fetch(`http://localhost:8000/recommendation/?artist_name=${encodeURIComponent(artistName)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.recommendations && data.recommendations.length > 0) {
+                        const artistList = data.recommendations.join(', ');
+                        announcementDiv.innerHTML = `Bonjour ${artistName}!<br/> en fonction de vos streams, je pense que vous ferez un superbe featuring avec des artistes - ${artistList}.`;
+                        showAnnouncement();
+                    } else {
+                        announcementDiv.innerHTML = `Bonjour ${artistName}! An error occurred while fetching recommendations.`;
+                        showAnnouncement();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    announcementDiv.innerHTML = `<span class="error">An error occurred while fetching recommendations: ${error.message}</span>`;
+                    showAnnouncement();
+                });
+        });
+
+        backButton.addEventListener('click', function() {
+            showLoginForm();
+        });
+
+        function showAnnouncement() {
+            loginForm.style.display = 'none';
+            announcementDiv.style.display = 'block';
+            backButton.style.display = 'block';
+        }
+
+        function showLoginForm() {
+            loginForm.style.display = 'flex';
+            announcementDiv.style.display = 'none';
+            backButton.style.display = 'none';
+            document.getElementById('artistName').value = '';
+        }
+    </script>
+</body>
+</html>
